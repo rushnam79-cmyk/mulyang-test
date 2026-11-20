@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>건설 자동화 · 물량 산출 (테스트)</title>
+<style>
+  :root{--bg:#f4f6f9;--card:#fff;--ink:#1d2733;--sub:#667;--line:#d8dee6;--pri:#1f3a5f;--bad:#b3261e;--ok:#1a7f37}
+  @media (prefers-color-scheme:dark){:root{--bg:#161b22;--card:#1f2630;--ink:#e6ebf1;--sub:#9aa7b5;--line:#33404f;--pri:#7fa6d6;--bad:#ff8a80;--ok:#6fdc8c}}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 'Malgun Gothic',system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px}
+  .box{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
+  h1{font-size:21px;margin:0 0 4px;color:var(--pri)}p{margin:6px 0;color:var(--sub);font-size:14.5px}
+  label{display:block;margin:12px 0 4px;font-size:14px}input{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink)}
+  button{width:100%;margin-top:16px;padding:11px;border-radius:8px;border:1px solid var(--pri);background:var(--pri);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.5;cursor:wait}
+  #msg{min-height:3em;margin-top:12px;font-size:14px}.bad{color:var(--bad)}.small{font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="box" id="box">
+  <h1>건설 자동화 · 물량 산출 <small style="font-size:13px;color:var(--sub)">(시범 테스트)</small></h1>
+  <p>초대받은 분만 쓸 수 있습니다. 전달받은 <b>접속 코드</b>를 입력하세요.</p>
+  <form id="f">
+    <label for="cd">접속 코드</label><input id="cd" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+    <button type="submit" id="go">열기</button>
+  </form>
+  <div id="msg" role="status"></div>
+  <p class="small">작업 내용은 이 브라우저에만 저장되며 서버로 전송되지 않습니다. 계산 결과는 참고용이며 검토 책임은 사용자에게 있습니다.</p>
+</div>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id), SK = 'qty-web-code-key', ITER = 600000, MAGIC = 'QTYC1';
+  const say = (t, cls) => { const m = $('msg'); if (!m) return; m.className = cls || ''; m.textContent = t; };
+  const enc = new TextEncoder(), b64 = (u) => btoa(String.fromCharCode.apply(null, u)), unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function fileParts() {
+    const buf = new Uint8Array(await (await fetch('app.enc', { cache: 'no-store' })).arrayBuffer());
+    if (new TextDecoder().decode(buf.slice(0, 5)) !== MAGIC) throw new Error('프로그램 파일 형식이 맞지 않습니다. 관리자에게 알려 주세요.');
+    return { salt: buf.slice(5, 21), iv: buf.slice(21, 33), ct: buf.slice(33) };
+  }
+  async function deriveKey(code, salt) {
+    const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITER }, base, 256));
+  }
+  async function openWith(raw, parts) {
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const html = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: parts.iv }, key, parts.ct));   // 코드가 틀리면 여기서 실패
+    window.WEB_USER = '시범 테스트'; window.WEB_LOGOUT = () => { try { localStorage.removeItem(SK); } catch (e) { /* 무시 */ } location.reload(); };
+    document.open(); document.write(html); document.close();
+  }
+  $('f').onsubmit = async (ev) => {
+    ev.preventDefault(); const go = $('go'); go.disabled = true; say('확인하는 중… (몇 초 걸릴 수 있습니다)');
+    try {
+      const parts = await fileParts(), raw = await deriveKey($('cd').value.trim(), parts.salt);
+      try { await openWith(raw, parts); try { localStorage.setItem(SK, b64(raw)); } catch (e) { /* 저장이 막혀도 이번 접속은 가능 */ } }
+      catch (e) { say('접속 코드가 맞지 않습니다. 다시 확인해 주세요.', 'bad'); go.disabled = false; }
+    } catch (e) { say(e.message || '프로그램을 불러오지 못했습니다. 인터넷을 확인하세요.', 'bad'); const g = $('go'); if (g) g.disabled = false; }
+  };
+  try { const s = localStorage.getItem(SK); if (s) { $('box').style.visibility = 'hidden'; fileParts().then((p) => openWith(unb64(s), p)).catch(() => { try { localStorage.removeItem(SK); } catch (e) { /* 무시 */ } $('box').style.visibility = ''; }); } } catch (e) { /* 무시 */ }
+})();
+</script>
+</body>
+</html>
