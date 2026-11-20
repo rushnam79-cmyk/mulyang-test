@@ -25,7 +25,7 @@
     <button type="submit" id="go">열기</button>
   </form>
   <div id="msg" role="status"></div>
-  <p class="small">작업 내용은 이 브라우저에만 저장되며 서버로 전송되지 않습니다. 계산 결과는 참고용이며 검토 책임은 사용자에게 있습니다.</p>
+  <p class="small">DWG 해독에 LibreDWG(GPL-3.0)를 사용합니다(<a href="NOTICE.txt">고지</a>). 작업 내용은 이 브라우저에만 저장되며 서버로 전송되지 않습니다. 계산 결과는 참고용이며 검토 책임은 사용자에게 있습니다.</p>
 </div>
 <script>
 (function () {
@@ -45,6 +45,7 @@
   async function openWith(raw, parts) {
     const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
     const html = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: parts.iv }, key, parts.ct));   // 코드가 틀리면 여기서 실패
+    window.WEB_DEC = async (name) => { const b = new Uint8Array(await (await fetch(name, { cache: 'no-store' })).arrayBuffer()); return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(0, 12) }, key, b.slice(12))); };   // 도면(DWG) 해독기 등 추가 파일을 같은 열쇠로 푼다
     window.WEB_USER = '시범 테스트'; window.WEB_LOGOUT = () => { try { localStorage.removeItem(SK); } catch (e) { /* 무시 */ } location.reload(); };
     document.open(); document.write(html); document.close();
   }
